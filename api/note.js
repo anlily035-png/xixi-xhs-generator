@@ -70,6 +70,11 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: '笔记不存在或已过期' });
       }
 
+      // debug: reveal exactly what Upstash returned
+      if (req.query.debug === '1') {
+        return res.status(200).json({ rawType: typeof raw, raw });
+      }
+
       // Upstash /get returns the value as-is (already parsed JSON object)
       const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
       return res.status(200).json(data);
