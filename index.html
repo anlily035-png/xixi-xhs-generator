@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>熙熙学姐 · 小红书笔记生成器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --coral: #D85A30;
+    --coral-light: #FAECE7;
+    --coral-mid: #F0997B;
+    --teal: #1D9E75;
+    --teal-light: #E1F5EE;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --gray: #5F5E5A;
+    --gray-light: #F1EFE8;
+    --gray-border: rgba(0,0,0,0.1);
+    --white: #ffffff;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  body { font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; background: #faf9f7; color: var(--text); min-height: 100vh; }
+  
+  /* Header */
+  .header { background: var(--white); border-bottom: 0.5px solid var(--gray-border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .logo { font-size: 17px; font-weight: 600; color: var(--coral); letter-spacing: -0.3px; }
+  .logo span { color: var(--text); font-weight: 400; }
+  .tab-nav { display: flex; gap: 0; }
+  .tab-btn { padding: 6px 16px; font-size: 13px; border: none; background: none; cursor: pointer; color: var(--text-muted); border-radius: 20px; transition: all 0.15s; font-family: inherit; }
+  .tab-btn.active { background: var(--coral-light); color: var(--coral); font-weight: 500; }
+  .tab-btn:hover:not(.active) { background: var(--gray-light); color: var(--text); }
+  
+  /* Layout */
+  .app { display: grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 56px); }
+  .sidebar { background: var(--white); border-right: 0.5px solid var(--gray-border); overflow-y: auto; }
+  .main { overflow-y: auto; }
+  
+  /* Panel headers */
+  .panel-header { padding: 1.25rem 1.25rem 0.75rem; border-bottom: 0.5px solid var(--gray-border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 13px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  
+  /* Upload zone */
+  .upload-zone { margin: 1rem; border: 1.5px dashed var(--coral-mid); border-radius: var(--radius); padding: 2rem 1rem; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--coral-light); }
+  .upload-zone:hover { border-color: var(--coral); background: #f8e8e2; }
+  .upload-zone.dragover { border-color: var(--coral); background: #f5dbd4; }
+  .upload-icon { font-size: 32px; margin-bottom: 8px; }
+  .upload-text { font-size: 14px; font-weight: 500; color: var(--coral); margin-bottom: 4px; }
+  .upload-hint { font-size: 12px; color: var(--text-muted); }
+  input[type=file] { display: none; }
+  
+  /* PDF pages preview */
+  .pages-section { padding: 0.75rem 1rem; }
+  .pages-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 0.5rem; }
+  .page-thumb { border: 2px solid transparent; border-radius: var(--radius-sm); overflow: hidden; cursor: pointer; transition: all 0.15s; position: relative; aspect-ratio: 3/4; background: var(--gray-light); }
+  .page-thumb.selected { border-color: var(--coral); }
+  .page-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .page-num { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.6); color: white; font-size: 10px; padding: 2px 5px; border-radius: 4px; }
+  .page-thumb .check { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; background: var(--coral); border-radius: 50%; display: none; align-items: center; justify-content: center; color: white; font-size: 11px; }
+  .page-thumb.selected .check { display: flex; }
+  
+  /* Template selector */
+  .template-section { padding: 0.75rem 1rem 1rem; }
+  .template-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+  .template-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tpl-pill { padding: 4px 12px; font-size: 12px; border: 0.5px solid var(--gray-border); border-radius: 20px; cursor: pointer; background: var(--white); color: var(--text-muted); transition: all 0.15s; }
+  .tpl-pill.active { background: var(--coral); color: white; border-color: var(--coral); }
+  .tpl-name-edit { width: 100%; padding: 6px 10px; font-size: 13px; border: 0.5px solid var(--gray-border); border-radius: var(--radius-sm); margin-bottom: 8px; font-family: inherit; background: var(--white); color: var(--text); }
+  .tpl-textarea { width: 100%; padding: 8px 10px; font-size: 12px; line-height: 1.6; border: 0.5px solid var(--gray-border); border-radius: var(--radius-sm); resize: vertical; min-height: 100px; font-family: inherit; color: var(--text); background: var(--white); }
+  .tpl-textarea:focus, .tpl-name-edit:focus { outline: none; border-color: var(--coral); }
+  
+  /* Generate button */
+  .gen-btn { display: block; width: calc(100% - 2rem); margin: 0 1rem 1rem; padding: 12px; background: var(--coral); color: white; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+  .gen-btn:hover { background: #c24e26; }
+  .gen-btn:disabled { background: var(--gray); cursor: not-allowed; opacity: 0.6; }
+  
+  /* Main content views */
+  .view { display: none; padding: 1.5rem; }
+  .view.active { display: block; }
+  
+  /* Result card */
+  .result-card { background: var(--white); border: 0.5px solid var(--gray-border); border-radius: var(--radius); overflow: hidden; }
+  .result-section { padding: 1.25rem; border-bottom: 0.5px solid var(--gray-border); }
+  .result-section:last-child { border-bottom: none; }
+  .result-label { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .copy-btn { font-size: 11px; color: var(--coral); cursor: pointer; border: none; background: none; font-family: inherit; padding: 2px 8px; border-radius: 4px; border: 0.5px solid var(--coral-mid); }
+  .copy-btn:hover { background: var(--coral-light); }
+  .result-title { font-size: 18px; font-weight: 600; line-height: 1.4; }
+  .result-body { font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+  .result-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill { padding: 4px 12px; background: var(--purple-light); color: var(--purple); border-radius: 20px; font-size: 13px; }
+  
+  /* Images strip */
+  .images-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .img-thumb-wrap { flex-shrink: 0; width: 100px; height: 130px; border-radius: var(--radius-sm); overflow: hidden; background: var(--gray-light); }
+  .img-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  
+  /* QR section */
+  .qr-card { background: var(--white); border: 0.5px solid var(--gray-border); border-radius: var(--radius); padding: 1.5rem; margin-top: 1rem; display: flex; align-items: center; gap: 1.5rem; }
+  .qr-wrap { flex-shrink: 0; }
+  .qr-wrap canvas, .qr-wrap img { border-radius: var(--radius-sm); }
+  .qr-info { flex: 1; }
+  .qr-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .qr-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .qr-hint { margin-top: 10px; padding: 8px 12px; background: var(--teal-light); border-radius: var(--radius-sm); font-size: 12px; color: var(--teal); }
+  
+  /* Publish list */
+  .pub-list { display: flex; flex-direction: column; gap: 12px; }
+  .pub-card { background: var(--white); border: 0.5px solid var(--gray-border); border-radius: var(--radius); padding: 1rem 1.25rem; display: grid; grid-template-columns: 80px 1fr auto; gap: 12px; align-items: start; cursor: pointer; transition: all 0.15s; }
+  .pub-card:hover { border-color: var(--coral-mid); }
+  .pub-thumb { width: 80px; height: 100px; border-radius: var(--radius-sm); overflow: hidden; background: var(--gray-light); }
+  .pub-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .pub-info {}
+  .pub-title-text { font-size: 14px; font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
+  .pub-excerpt { font-size: 12px; color: var(--text-muted); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pub-meta { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+  .pub-actions { display: flex; flex-direction: column; gap: 6px; }
+  .pub-btn { padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 0.5px solid var(--gray-border); background: var(--white); color: var(--text-muted); font-family: inherit; white-space: nowrap; }
+  .pub-btn.primary { background: var(--coral); color: white; border-color: var(--coral); }
+  .pub-btn.danger { color: #E24B4A; border-color: #F09595; }
+  
+  /* Loading state */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(250,249,247,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; gap: 16px; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--coral-light); border-top-color: var(--coral); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: var(--text-muted); }
+  
+  /* Empty state */
+  .empty-state { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+  .empty-title { font-size: 16px; font-weight: 500; margin-bottom: 8px; color: var(--text); }
+  .empty-desc { font-size: 14px; }
+  
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: #1a1a1a; color: white; padding: 10px 20px; border-radius: 20px; font-size: 13px; z-index: 9999; transition: transform 0.3s; pointer-events: none; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  
+  /* Step indicator */
+  .step-hint { font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .step-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gray-border); }
+  .step-dot.done { background: var(--coral); }
+  
+  /* Section divider */
+  .section-title { font-size: 13px; font-weight: 500; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .section-title::after { content: ''; flex: 1; height: 0.5px; background: var(--gray-border); }
+  
+  /* Preview page for QR scan */
+  .preview-page { background: white; min-height: 100vh; padding: 1rem; max-width: 480px; margin: 0 auto; font-family: -apple-system, 'PingFang SC', sans-serif; }
+  .preview-page .p-title { font-size: 20px; font-weight: 700; margin-bottom: 16px; line-height: 1.4; }
+  .preview-page .p-body { font-size: 15px; line-height: 1.8; white-space: pre-wrap; margin-bottom: 16px; }
+  .preview-page .p-imgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 16px; }
+  .preview-page .p-imgs img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+  .preview-page .p-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preview-page .p-tag { font-size: 14px; color: #ff2442; }
+  .preview-page .p-copy-all { display: block; width: 100%; padding: 14px; background: #ff2442; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px; }
+  
+  scrollbar-width: thin; scrollbar-color: var(--gray-border) transparent;
+
+  /* API Key modal */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 9000; }
+  .modal-box { background: var(--white); border-radius: var(--radius); padding: 2rem; width: 420px; max-width: 90vw; }
+  .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .modal-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.25rem; }
+  .modal-input { width: 100%; padding: 10px 12px; font-size: 14px; border: 0.5px solid var(--gray-border); border-radius: var(--radius-sm); font-family: inherit; color: var(--text); margin-bottom: 10px; }
+  .modal-input:focus { outline: none; border-color: var(--coral); }
+  .modal-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 1.25rem; }
+  .modal-hint a { color: var(--coral); }
+  .modal-btn { width: 100%; padding: 12px; background: var(--coral); color: white; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .modal-btn:hover { background: #c24e26; }
+  .key-status { font-size: 12px; color: var(--teal); cursor: pointer; padding: 4px 10px; border: 0.5px solid var(--teal); border-radius: 20px; background: none; font-family: inherit; }
+  .key-status:hover { background: var(--teal-light); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">熙熙学姐 <span>· 小红书生成器</span></div>
+  <button class="key-status" onclick="showKeyModal()" id="keyStatusBtn">⚙ API Key</button>
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchView('generator')">✦ 生成笔记</button>
+    <button class="tab-btn" onclick="switchView('list')">📋 发布列表 <span id="list-count" style="background:var(--coral);color:white;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;display:none">0</span></button>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="panel-header">
+      <span class="panel-title">上传 PDF</span>
+    </div>
+
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="upload-icon">📄</div>
+      <div class="upload-text">点击或拖拽 PDF 上传</div>
+      <div class="upload-hint">每次上传一道题目的 PDF</div>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf" onchange="handleFile(this.files[0])">
+
+    <div class="pages-section" id="pagesSection" style="display:none">
+      <div class="panel-header" style="padding-left:0;padding-right:0">
+        <span class="panel-title">选择页面</span>
+        <span style="font-size:12px;color:var(--coral);cursor:pointer" onclick="selectAllPages()">全选</span>
+      </div>
+      <div class="pages-grid" id="pagesGrid"></div>
+    </div>
+
+    <div class="template-section">
+      <div class="panel-header" style="padding-left:0;padding-right:0">
+        <span class="panel-title">提示词模板</span>
+      </div>
+      <div class="template-pills" id="tplPills"></div>
+      <input type="text" class="tpl-name-edit" id="tplName" placeholder="模板名称" oninput="saveTpl()">
+      <textarea class="tpl-textarea" id="tplContent" oninput="saveTpl()" rows="6"></textarea>
+    </div>
+
+    <button class="gen-btn" id="genBtn" onclick="generate()" disabled>✦ 生成小红书笔记</button>
+    <button class="gen-btn" id="demoBtn" onclick="runDemo()" style="background:var(--teal);margin-top:0">🧪 演示模式（无需 PDF）</button>
+
+    <div class="step-hint" id="stepHint">
+      <div class="step-dot" id="s1"></div>
+      <div class="step-dot" id="s2"></div>
+      <div class="step-dot" id="s3"></div>
+      <span id="stepText">上传 PDF 开始</span>
+    </div>
+  </div>
+
+  <!-- Main panel -->
+  <div class="main">
+    <!-- Generator view -->
+    <div class="view active" id="view-generator">
+      <div id="generatorEmpty" class="empty-state">
+        <div class="empty-icon">✦</div>
+        <div class="empty-title">上传面试题 PDF，一键生成小红书笔记</div>
+        <div class="empty-desc">支持多页 PDF，每一页都会转成图片附在笔记里</div>
+      </div>
+      
+      <div id="resultArea" style="display:none">
+        <div class="section-title">生成结果</div>
+        <div class="result-card">
+          <div class="result-section">
+            <div class="result-label">标题 <button class="copy-btn" onclick="copyText('result-title-text')">复制</button></div>
+            <div class="result-title" id="result-title-text"></div>
+          </div>
+          <div class="result-section">
+            <div class="result-label">正文 <button class="copy-btn" onclick="copyText('result-body-text')">复制</button></div>
+            <div class="result-body" id="result-body-text"></div>
+          </div>
+          <div class="result-section" id="result-images-section">
+            <div class="result-label">图片 <button class="copy-btn" onclick="copyHint()">长按保存</button></div>
+            <div class="images-strip" id="result-images-strip"></div>
+          </div>
+          <div class="result-section">
+            <div class="result-label">标签 <button class="copy-btn" onclick="copyText('result-tags-raw')">复制</button></div>
+            <div class="result-tags" id="result-tags-wrap"></div>
+            <div id="result-tags-raw" style="display:none"></div>
+          </div>
+        </div>
+
+        <div class="qr-card" id="qrCard">
+          <div class="qr-wrap" id="qrcode"></div>
+          <div class="qr-info">
+            <div class="qr-title">📱 扫码发布</div>
+            <div class="qr-desc">用小红书扫描左侧二维码，笔记内容自动展示，复制粘贴即可发布。</div>
+            <div class="qr-hint">✓ 标题、正文、图片、标签全部就位</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:1rem">
+          <button onclick="publishToXHS()" style="flex:1;padding:12px;background:#ff2442;color:white;border:none;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">🚀 一键发布到小红书</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button onclick="saveToList()" style="flex:1;padding:10px;background:var(--teal);color:white;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">📋 保存到发布列表</button>
+          <button onclick="resetAll()" style="flex:1;padding:10px;background:var(--white);color:var(--text-muted);border:0.5px solid var(--gray-border);border-radius:var(--radius);font-size:13px;cursor:pointer;font-family:inherit">↺ 重新生成</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- List view -->
+    <div class="view" id="view-list">
+      <div class="section-title">发布列表</div>
+      <div class="pub-list" id="pubList">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <div class="empty-title">还没有已保存的笔记</div>
+          <div class="empty-desc">生成笔记后点击"保存到发布列表"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- API Key Modal -->
+<div class="modal-mask" id="keyModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">🔑 填入 SiliconFlow API Key</div>
+    <div class="modal-desc">Key 仅保存在你本地浏览器，不会上传任何地方。每次打开文件自动读取，无需重填。</div>
+    <input type="password" class="modal-input" id="keyInput" placeholder="sk-..." autocomplete="off">
+    <div class="modal-hint">没有 Key？前往 <a href="https://cloud.siliconflow.cn/" target="_blank">cloud.siliconflow.cn</a> 获取</div>
+    <button class="modal-btn" onclick="saveKey()">保存并开始使用</button>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay" style="display:none">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">正在生成笔记...</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── State ──────────────────────────────────────────────────────
+let pages = [];
+let selectedPages = new Set();
+let currentResult = null;
+let publishList = [];
+let activeTpl = 0;
+
+const DEFAULT_TEMPLATES = [
+  {
+    name: '面试干货型',
+    content: `你是一位专注于公务员/事业单位考试的小红书内容创作者"熙熙学姐"。
+请根据以下面试题目内容，生成一篇完整的小红书笔记。
+
+要求：
+- 标题：吸引人、含数字或emoji，30字以内，突出"面试题"或"答题技巧"
+- 正文：先给出题目本身，再给出金句式答题思路（分3-5个要点），用emoji分隔，口语化，800-1200字
+- 标签：10个相关hashtag，包含 #公务员面试 #面试技巧 #事业单位 等核心词
+
+题目内容：
+{{content}}
+
+请严格按以下JSON格式输出，不要输出其他内容：
+{"title":"...","body":"...","tags":["#...","#..."]}`
+  },
+  {
+    name: '轻松解析型',
+    content: `你是小红书博主"熙熙学姐"，风格轻松有趣，专做面试题解析。
+请将以下面试题做成一篇小红书笔记，风格要像朋友聊天一样，有共鸣感。
+
+要求：
+- 标题：带有疑问句或感叹，有代入感，30字以内
+- 正文：先说"这道题好多人都答错"，然后给出正确思路，加入场景化解读，结尾呼吁收藏，600-900字
+- 标签：10个hashtag
+
+题目内容：
+{{content}}
+
+JSON格式输出：{"title":"...","body":"...","tags":["#...","#..."]}`
+  },
+  {
+    name: '金句总结型',
+    content: `你是专业的公务员考试内容博主"熙熙学姐"。
+请将以下面试题提炼成"金句式"笔记，适合考生截图背诵。
+
+要求：
+- 标题：强调"金句/模板/必背"，含数字，30字以内
+- 正文：列出5-8条可以直接套用的答题金句，每条独立成段，简洁有力，500-800字
+- 标签：10个hashtag
+
+题目内容：
+{{content}}
+
+JSON格式输出：{"title":"...","body":"...","tags":["#...","#..."]}`
+  },
+  {
+    name: '错误警示型',
+    content: `你是小红书博主"熙熙学姐"，专门帮考生避开面试坑。
+请以"反面教材"角度，生成一篇面试避坑小红书笔记。
+
+要求：
+- 标题：带"避坑""千万别""考官最怕"等字眼，吸引人，30字以内
+- 正文：先说常见错误答法（2-3个），再给出正确示范，对比鲜明，600-1000字
+- 标签：10个hashtag
+
+题目内容：
+{{content}}
+
+JSON格式输出：{"title":"...","body":"...","tags":["#...","#..."]}`
+  },
+  {
+    name: '自定义模板',
+    content: `你是小红书博主"熙熙学姐"，在这里自定义你的提示词。
+
+题目内容：
+{{content}}
+
+请按JSON格式输出：{"title":"...","body":"...","tags":["#...","#..."]}`
+  }
+];
+
+let templates = JSON.parse(localStorage.getItem('xhs_templates') || 'null') || DEFAULT_TEMPLATES.map(t => ({...t}));
+publishList = JSON.parse(localStorage.getItem('xhs_publist') || '[]');
+
+// ── Init ──────────────────────────────────────────────────────
+function init() {
+  renderTplPills();
+  loadTpl(0);
+  renderPubList();
+  updateListCount();
+  
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+}
+
+// ── Template management ────────────────────────────────────────
+function renderTplPills() {
+  const wrap = document.getElementById('tplPills');
+  wrap.innerHTML = templates.map((t,i) => `<div class="tpl-pill${i===activeTpl?' active':''}" onclick="loadTpl(${i})">${t.name}</div>`).join('');
+}
+
+function loadTpl(i) {
+  activeTpl = i;
+  document.getElementById('tplName').value = templates[i].name;
+  document.getElementById('tplContent').value = templates[i].content;
+  renderTplPills();
+}
+
+function saveTpl() {
+  templates[activeTpl].name = document.getElementById('tplName').value;
+  templates[activeTpl].content = document.getElementById('tplContent').value;
+  localStorage.setItem('xhs_templates', JSON.stringify(templates));
+  document.querySelectorAll('.tpl-pill')[activeTpl].textContent = templates[activeTpl].name;
+}
+
+// ── PDF handling ───────────────────────────────────────────────
+async function handleFile(file) {
+  if (!file || !file.name.endsWith('.pdf')) { showToast('请上传 PDF 文件'); return; }
+  showLoading('正在解析 PDF...');
+  pages = [];
+  selectedPages = new Set();
+  
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const vp = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    pages.push(canvas.toDataURL('image/jpeg', 0.85));
+    selectedPages.add(i-1);
+  }
+  
+  hideLoading();
+  renderPages();
+  document.getElementById('pagesSection').style.display = '';
+  document.getElementById('uploadZone').querySelector('.upload-text').textContent = `✓ ${file.name}`;
+  updateStep(2);
+  checkGenBtn();
+}
+
+function renderPages() {
+  const grid = document.getElementById('pagesGrid');
+  grid.innerHTML = pages.map((src,i) => `
+    <div class="page-thumb${selectedPages.has(i)?' selected':''}" onclick="togglePage(${i})" id="pt${i}">
+      <img src="${src}" loading="lazy">
+      <div class="page-num">${i+1}</div>
+      <div class="check">✓</div>
+    </div>`).join('');
+}
+
+function togglePage(i) {
+  if(selectedPages.has(i)) { selectedPages.delete(i); } else { selectedPages.add(i); }
+  renderPages();
+  checkGenBtn();
+}
+
+function selectAllPages() {
+  pages.forEach((_,i) => selectedPages.add(i));
+  renderPages();
+}
+
+function checkGenBtn() {
+  const btn = document.getElementById('genBtn');
+  btn.disabled = pages.length === 0 || selectedPages.size === 0;
+  if (pages.length > 0 && selectedPages.size > 0) updateStep(3);
+}
+
+// ── Extract text from pages for AI ────────────────────────────
+async function extractTextFromPDF(pdfData) {
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+    let text = '';
+    for(let i=1;i<=pdf.numPages;i++) {
+      if(!selectedPages.has(i-1)) continue;
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(s=>s.str).join(' ') + '\n';
+    }
+    return text.trim();
+  } catch(e) { return ''; }
+}
+
+// ── Generate ───────────────────────────────────────────────────
+async function generate() {
+  if (!getKey()) { showKeyModal(); return; }
+  const tpl = templates[activeTpl].content;
+  if(!tpl) { showToast('请先选择或填写提示词模板'); return; }
+  
+  showLoading('正在调用 AI 生成笔记...');
+  
+  let pdfText = '';
+  const fi = document.getElementById('fileInput');
+  if (fi.files[0]) {
+    const buf = await fi.files[0].arrayBuffer();
+    pdfText = await extractTextFromPDF(buf);
+  }
+  
+  const selectedImgs = [...selectedPages].sort((a,b)=>a-b).map(i=>pages[i]);
+  const pageDescriptions = selectedImgs.map((_,i)=>`[第${i+1}页图片]`).join(' ');
+  const contentForAI = pdfText || `面试题PDF，共${selectedImgs.length}页，${pageDescriptions}`;
+  
+  const prompt = tpl.replace('{{content}}', contentForAI);
+  
+  try {
+    const res = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getKey() },
+      body: JSON.stringify({
+        model: 'deepseek-ai/DeepSeek-V3',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error?.message || `API错误 ${res.status}`);
+    const raw = data.choices?.[0]?.message?.content || '';
+    if (!raw) throw new Error('AI 返回内容为空，请检查 API Key 是否有效');
+    
+    let parsed;
+    try {
+      const cleaned = raw.replace(/```json|```/g,'').trim();
+      parsed = JSON.parse(cleaned);
+    } catch(e) {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if(m) parsed = JSON.parse(m[0]);
+      else throw new Error('解析失败');
+    }
+    
+    currentResult = { ...parsed, images: selectedImgs, createdAt: new Date().toLocaleString('zh-CN') };
+    hideLoading();
+    renderResult(currentResult);
+    generateQR(currentResult);
+    
+  } catch(err) {
+    hideLoading();
+    showToast('生成失败：' + (err.message||'请检查网络'));
+    console.error(err);
+  }
+}
+
+// ── Demo mode ─────────────────────────────────────────────────
+async function runDemo() {
+  showLoading('加载演示数据...');
+  await new Promise(r => setTimeout(r, 800));
+
+  const demoResult = {
+    title: '🔥 公务员面试必背！"为什么选择基层岗位"万能模板来了',
+    body: `姐妹们今天分享一道超高频面试题——
+"你为什么选择来基层工作？"
+
+很多人一听到这题就开始背稿子，结果说得又空又假，考官直接皱眉😮‍💨
+
+✅ 正确打开方式分三步：
+
+【第一步：真诚表达个人动机】
+不要上来就说"报效祖国、服务人民"这种大话。
+先说一个具体的、真实的原因，比如：
+"我在大学期间参加过乡村支教，那段经历让我意识到基层真正需要年轻人。"
+有细节才有说服力。
+
+【第二步：结合岗位说价值】
+展示你对这个岗位的了解，比如：
+"基层是政策落地的最后一公里，也是年轻干部成长最快的地方。"
+让考官觉得你是认真想过的，不是随便投的。
+
+【第三步：展望未来，表达决心】
+结尾要有力量感：
+"我希望用三到五年时间，在基层真正做几件看得见、摸得着的实事。"
+
+💡 万能金句收藏：
+→ "基层是最好的课堂，群众是最好的老师。"
+→ "选择基层，是选择了一条更难但更有意义的路。"
+
+记得收藏！面试前看一遍，答题思路直接清晰三倍🌟`,
+    tags: ['#公务员面试', '#面试技巧', '#基层岗位', '#事业单位', '#国考', '#省考', '#面试模板', '#答题技巧', '#熙熙学姐', '#上岸干货'],
+    images: [],
+    createdAt: new Date().toLocaleString('zh-CN')
+  };
+
+  hideLoading();
+  currentResult = demoResult;
+  renderResult(demoResult);
+  generateQR(demoResult);
+}
+
+// ── Render result ──────────────────────────────────────────────
+function renderResult(r) {
+  document.getElementById('generatorEmpty').style.display = 'none';
+  document.getElementById('resultArea').style.display = '';
+  document.getElementById('result-title-text').textContent = r.title;
+  document.getElementById('result-body-text').textContent = r.body;
+  
+  const strip = document.getElementById('result-images-strip');
+  strip.innerHTML = r.images.map(src=>`<div class="img-thumb-wrap"><img src="${src}"></div>`).join('');
+  
+  const tags = Array.isArray(r.tags) ? r.tags : r.tags.split(/\s+/);
+  document.getElementById('result-tags-wrap').innerHTML = tags.map(t=>`<span class="tag-pill">${t}</span>`).join('');
+  document.getElementById('result-tags-raw').textContent = tags.join(' ');
+}
+
+// ── QR Code ───────────────────────────────────────────────────
+async function generateQR(result) {
+  const wrap = document.getElementById('qrcode');
+  const qrCard = document.getElementById('qrCard');
+  wrap.innerHTML = '';
+
+  // 只有 https/http 且非纯本地环境才能走 API
+  const isLocal = !(location.protocol === 'https:' || location.protocol === 'http:')
+                  || location.hostname === 'localhost'
+                  || location.hostname === '127.0.0.1'
+                  || location.hostname === '';
+
+  // 本地模式：无法生成有效二维码，改为"预览"按钮
+  if (isLocal) {
+    const localId = 'loc_' + Date.now().toString(36);
+    try { sessionStorage.setItem(localId, JSON.stringify({ title: result.title, body: result.body, tags: result.tags, images: result.images || [] })); } catch(_){}
+
+    qrCard.innerHTML = `
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">📱 预览笔记（本地模式）</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:10px">本地文件无法生成跨设备二维码。部署到 Vercel 后自动启用扫码功能。</div>
+        <button onclick="openLocalPreview('${localId}')" style="padding:10px 20px;background:var(--coral);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">👁 打开预览页</button>
+      </div>`;
+    return;
+  }
+
+  // 线上模式：存 Upstash → 生成二维码
+  wrap.innerHTML = '<div style="width:120px;height:120px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted)">生成中...</div>';
+  const base = location.href.split('?')[0].replace(/\/+$/, '');
+
+  try {
+    const r = await fetch('/api/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: result.title, body: result.body, tags: result.tags, images: result.images || [] })
+    });
+    if (!r.ok) throw new Error('api ' + r.status);
+    const { id } = await r.json();
+    const previewUrl = `${base}?id=${id}`;
+
+    wrap.innerHTML = '';
+    const qrImg = document.createElement('img');
+    qrImg.width = 120; qrImg.height = 120;
+    qrImg.style.cssText = 'border-radius:8px;display:block';
+    qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=4&data=' + encodeURIComponent(previewUrl);
+    qrImg.onerror = () => {
+      try { new QRCode(wrap, { text: previewUrl, width: 120, height: 120, colorDark: '#1a1a1a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); }
+      catch(e) { wrap.innerHTML = '<div style="width:120px;height:120px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--coral);text-align:center;padding:6px">二维码生成失败</div>'; }
+    };
+    wrap.appendChild(qrImg);
+  } catch(e) {
+    wrap.innerHTML = `<div style="width:120px;height:120px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--coral);text-align:center;padding:6px">存储失败<br>${e.message}</div>`;
+  }
+}
+
+function openLocalPreview(lid) {
+  const base = location.href.split('?')[0].replace(/\/+$/, '');
+  window.open(`${base}?lid=${lid}`, '_blank');
+}
+
+// ── Preview page (when opened via QR) ─────────────────────────
+async function checkPreviewMode() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  const d = params.get('d');
+  const lid = params.get('lid');
+  if (!id && !d && !lid) return;
+
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:14px;color:#999;font-family:-apple-system,PingFang SC,sans-serif">加载中...</div>';
+
+  let r;
+  try {
+    if (lid) {
+      // 本地预览模式：从 sessionStorage 读取完整数据
+      const stored = sessionStorage.getItem(lid);
+      if (!stored) throw new Error('本地预览已过期，请重新生成');
+      r = JSON.parse(stored);
+    } else if (d) {
+      // 旧降级模式兼容
+      const mini = JSON.parse(decodeURIComponent(escape(atob(d))));
+      r = mini;
+    } else {
+      const res = await fetch(`/api/note?id=${id}`);
+      if (!res.ok) throw new Error('请求失败');
+      r = await res.json();
+      if (r.error) throw new Error(r.error);
+    }
+  } catch(e) {
+    document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-size:14px;color:#999;font-family:-apple-system,PingFang SC,sans-serif;gap:8px"><div>内容加载失败</div><div style="font-size:12px">${e.message}</div></div>`;
+    return;
+  }
+
+  const tags = Array.isArray(r.tags) ? r.tags : [];
+  const images = r.images || [];
+  const fullText = (r.title||'') + '\n\n' + (r.body||'') + '\n\n' + tags.join(' ');
+
+  // 自动复制文案到剪贴板
+  try {
+    await navigator.clipboard.writeText(fullText);
+  } catch(e) {
+    // 降级处理
+    const ta = document.createElement('textarea');
+    ta.value = fullText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+
+  // 渲染预览页
+  document.body.innerHTML = `
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:-apple-system,'PingFang SC',sans-serif;background:#f5f5f5;color:#1a1a1a}
+      .xhs-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;background:#ff2442;color:white;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin-top:12px;letter-spacing:1px}
+      .copy-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:13px;background:white;color:#ff2442;border:1.5px solid #ff2442;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:10px}
+      .img-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:12px}
+      .img-grid img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+      .tag{font-size:14px;color:#ff2442;margin-right:6px}
+      .notice{background:#fff8e7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#b05c00;line-height:1.6}
+      .notice b{color:#ff2442}
+    </style>
+    <div style="max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:30px">
+      <div style="background:#ff2442;color:white;padding:14px 16px;font-size:15px;font-weight:700;text-align:center;letter-spacing:1px">熙熙学姐 · 小红书笔记</div>
+      
+      <div style="padding:14px 14px 0">
+        <div class="notice">
+          <b>📋 文案已自动复制到剪贴板！</b><br>
+          点击下方「+ 发小红书」，进入发布页后直接粘贴即可。
+        </div>
+
+        ${images.length ? `<div class="img-grid">${images.map(src=>`<img src="${src}">`).join('')}</div>` : ''}
+        
+        <div style="background:white;border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="font-size:13px;color:#999;margin-bottom:6px">标题</div>
+          <div style="font-size:17px;font-weight:700;line-height:1.5">${(r.title||'').replace(/</g,'&lt;')}</div>
+        </div>
+
+        <div style="background:white;border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="font-size:13px;color:#999;margin-bottom:6px">正文</div>
+          <div style="font-size:14px;line-height:1.9;white-space:pre-wrap;color:#333">${(r.body||'').replace(/</g,'&lt;')}</div>
+        </div>
+
+        <div style="background:white;border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="font-size:13px;color:#999;margin-bottom:8px">话题标签</div>
+          <div>${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+        </div>
+
+        <button class="xhs-btn" onclick="openXHS()">+ 发小红书</button>
+        <button class="copy-btn" onclick="copyAgain()">📋 重新复制文案</button>
+      </div>
+    </div>
+  `;
+
+  // 存图片到全局供上传用
+  window._xhsImages = images;
+  window._xhsText = fullText;
+
+  window.openXHS = function() {
+    // 先确保文案在剪贴板
+    navigator.clipboard.writeText(window._xhsText).catch(()=>{});
+    // 跳转小红书发布页（deeplink）
+    const scheme = 'xhsdiscover://';
+    const fallback = 'https://app.xiaohongshu.com/';
+    // 尝试唤起App
+    window.location.href = scheme;
+    setTimeout(() => {
+      window.location.href = fallback;
+    }, 1500);
+  };
+
+  window.copyAgain = function() {
+    navigator.clipboard.writeText(window._xhsText).then(() => {
+      alert('✓ 已重新复制！');
+    }).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = window._xhsText;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      alert('✓ 已重新复制！');
+    });
+  };
+  
+  window.copyAll = function() {
+    const text = (r.title||'') + '\n\n' + (r.body||'') + '\n\n' + tags.join(' ');
+    navigator.clipboard.writeText(text).then(()=>{ alert('已复制！去小红书粘贴吧~'); }).catch(()=>{
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      alert('已复制！去小红书粘贴吧~');
+    });
+  };
+}
+
+// ── Publish list ───────────────────────────────────────────────
+function saveToList() {
+  if (!currentResult) return;
+  publishList.unshift({ ...currentResult, id: Date.now() });
+  localStorage.setItem('xhs_publist', JSON.stringify(publishList.map(item => ({...item, images: item.images?.slice(0,1)}))));
+  renderPubList();
+  updateListCount();
+  showToast('✓ 已保存到发布列表');
+}
+
+function renderPubList() {
+  const el = document.getElementById('pubList');
+  if (!publishList.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">还没有已保存的笔记</div><div class="empty-desc">生成笔记后点击"保存到发布列表"</div></div>`;
+    return;
+  }
+  el.innerHTML = publishList.map((item,i) => `
+    <div class="pub-card">
+      <div class="pub-thumb">${item.images&&item.images[0]?`<img src="${item.images[0]}" loading="lazy">`:'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px">📄</div>'}</div>
+      <div class="pub-info">
+        <div class="pub-title-text">${item.title||'无标题'}</div>
+        <div class="pub-excerpt">${(item.body||'').substring(0,80)}...</div>
+        <div class="pub-meta">${item.createdAt||''}</div>
+      </div>
+      <div class="pub-actions">
+        <button class="pub-btn primary" onclick="viewFromList(${i})">查看</button>
+        <button class="pub-btn danger" onclick="deleteFromList(${i})">删除</button>
+      </div>
+    </div>`).join('');
+}
+
+function viewFromList(i) {
+  currentResult = publishList[i];
+  switchView('generator');
+  renderResult(currentResult);
+  generateQR(currentResult);
+  document.getElementById('genBtn').disabled = false;
+  updateStep(3);
+}
+
+function deleteFromList(i) {
+  if (!confirm('确认删除这条笔记？')) return;
+  publishList.splice(i, 1);
+  localStorage.setItem('xhs_publist', JSON.stringify(publishList));
+  renderPubList();
+  updateListCount();
+  showToast('已删除');
+}
+
+function updateListCount() {
+  const cnt = document.getElementById('list-count');
+  cnt.textContent = publishList.length;
+  cnt.style.display = publishList.length ? '' : 'none';
+}
+
+// ── UI helpers ─────────────────────────────────────────────────
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    b.classList.toggle('active', (i===0&&name==='generator')||(i===1&&name==='list'));
+  });
+}
+
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+function copyText(id) {
+  const el = document.getElementById(id);
+  const text = el.textContent;
+  navigator.clipboard.writeText(text).catch(()=>{
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  });
+  showToast('已复制 ✓');
+}
+
+function copyHint() { showToast('长按图片可保存到相册'); }
+
+function resetAll() {
+  currentResult = null;
+  pages = []; selectedPages = new Set();
+  document.getElementById('generatorEmpty').style.display = '';
+  document.getElementById('resultArea').style.display = 'none';
+  document.getElementById('pagesSection').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('uploadZone').querySelector('.upload-text').textContent = '点击或拖拽 PDF 上传';
+  document.getElementById('pagesGrid').innerHTML = '';
+  document.getElementById('qrcode').innerHTML = '';
+  updateStep(1);
+  checkGenBtn();
+}
+
+function updateStep(n) {
+  [1,2,3].forEach(i => {
+    document.getElementById('s'+i).classList.toggle('done', i<=n);
+  });
+  const texts = { 1:'上传 PDF 开始', 2:'选择页面，点击生成', 3:'笔记已就绪 🎉' };
+  document.getElementById('stepText').textContent = texts[n];
+}
+
+// ── 一键发布到小红书 ────────────────────────────────────────
+const EXTENSION_ID = 'gahechgiadobmfnnhpbhcpomaodekbnj'; // 安装插件后填入
+
+async function publishToXHS() {
+  if (!currentResult) { showToast('请先生成笔记'); return; }
+  
+  // 检查插件是否安装
+  if (EXTENSION_ID === 'EXTENSION_ID_PLACEHOLDER') {
+    showToast('请先安装「熙熙学姐发布助手」插件并填入插件ID');
+    return;
+  }
+  
+  const data = {
+    title: currentResult.title,
+    body: currentResult.body,
+    tags: currentResult.tags,
+    images: currentResult.images || []
+  };
+  
+  try {
+    chrome.runtime.sendMessage(EXTENSION_ID, { type: 'XIXI_PUBLISH', data }, (res) => {
+      if (chrome.runtime.lastError) {
+        showToast('⚠️ 未检测到插件，请先安装发布助手插件');
+        return;
+      }
+      if (res && res.success) {
+        showToast('✓ 正在打开小红书发布页...');
+      }
+    });
+  } catch(e) {
+    showToast('⚠️ 请先安装「熙熙学姐发布助手」插件');
+  }
+}
+
+// ── API Key management ────────────────────────────────────────
+function getKey() { return localStorage.getItem('xhs_api_key') || ''; }
+
+function showKeyModal() {
+  document.getElementById('keyInput').value = getKey();
+  document.getElementById('keyModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('keyInput').focus(), 100);
+}
+
+function saveKey() {
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) { showToast('请填入 API Key'); return; }
+  localStorage.setItem('xhs_api_key', k);
+  document.getElementById('keyModal').style.display = 'none';
+  updateKeyStatus();
+  showToast('✓ API Key 已保存');
+}
+
+function updateKeyStatus() {
+  const btn = document.getElementById('keyStatusBtn');
+  const k = getKey();
+  btn.textContent = k ? '✓ Key 已配置' : '⚙ 填入 API Key';
+  btn.style.color = k ? 'var(--teal)' : 'var(--coral)';
+  btn.style.borderColor = k ? 'var(--teal)' : 'var(--coral)';
+}
+
+// ── Boot ───────────────────────────────────────────────────────
+(async () => {
+  const params = new URLSearchParams(location.search);
+  if (params.get('id')) {
+    await checkPreviewMode();
+  } else {
+    init();
+    updateKeyStatus();
+    if (!getKey()) showKeyModal();
+  }
+})();
+</script>
+</body>
+</html>

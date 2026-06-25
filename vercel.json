@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/note.js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    { "source": "/api/note", "destination": "/api/note" }
+  ]
+}
