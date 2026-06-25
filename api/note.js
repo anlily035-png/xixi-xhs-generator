@@ -10,9 +10,10 @@ function shortId() {
 async function redisSet(key, value, ttl) {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
+  // text/plain 确保 Upstash 把值当纯字符串存，不做额外 JSON 处理
   const res = await fetch(`${url}/set/${encodeURIComponent(key)}?ex=${ttl}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' },
     body: JSON.stringify(value),
   });
   if (!res.ok) throw new Error(`SET error ${res.status}: ${await res.text()}`);
