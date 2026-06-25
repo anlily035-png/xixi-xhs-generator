@@ -780,16 +780,27 @@ async function checkPreviewMode() {
   window._xhsText = fullText;
 
   window.openXHS = function() {
-    // 先确保文案在剪贴板
-    navigator.clipboard.writeText(window._xhsText).catch(()=>{});
-    // 跳转小红书发布页（deeplink）
-    const scheme = 'xhsdiscover://';
-    const fallback = 'https://app.xiaohongshu.com/';
-    // 尝试唤起App
-    window.location.href = scheme;
-    setTimeout(() => {
-      window.location.href = fallback;
-    }, 1500);
+    navigator.clipboard.writeText(window._xhsText).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = window._xhsText;
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    });
+
+    const ua = navigator.userAgent || '';
+    const isAndroid = /android/i.test(ua);
+
+    if (isAndroid) {
+      // Android：用 intent scheme 打开小红书发布页
+      const intent = 'intent://note/create#Intent;scheme=xhsdiscover;package=com.xingin.xhs;end';
+      window.location.href = intent;
+    } else {
+      // iOS / 其他：先尝试 scheme 唤起，超时后跳 App Store
+      const timer = setTimeout(() => {
+        window.location.href = 'https://apps.apple.com/cn/app/id741292507';
+      }, 1500);
+      window.addEventListener('pagehide', () => clearTimeout(timer), { once: true });
+      window.location.href = 'xhsdiscover://note/create';
+    }
   };
 
   window.copyAgain = function() {
