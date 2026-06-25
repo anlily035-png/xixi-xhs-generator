@@ -1,46 +1,38 @@
-// Vercel Serverless Function — Upstash Redis read/write for note preview
+// Vercel Serverless Function — Upstash Redis read/write
 // ENV: KV_REST_API_URL, KV_REST_API_TOKEN
 
-const TTL = 60 * 60 * 24 * 7; // 7 days
+const TTL = 60 * 60 * 24 * 7; // 7 days in seconds
 
 function shortId() {
   return Math.random().toString(36).slice(2, 9);
 }
 
-async function upstashCmd(commands) {
+async function redisSet(key, value, ttl) {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
-  if (!url || !token) throw new Error('Upstash env vars missing');
-
-  const res = await fetch(`${url}/pipeline`, {
+  // POST /set/key?ex=seconds  body = value string
+  const res = await fetch(`${url}/set/${encodeURIComponent(key)}?ex=${ttl}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(commands),
+    body: JSON.stringify(value), // Upstash accepts any JSON as value
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Upstash error ${res.status}: ${text}`);
-  }
-
+  if (!res.ok) throw new Error(`Upstash SET error ${res.status}`);
   return res.json();
 }
 
-function parseResult(raw) {
-  if (raw === null || raw === undefined) return null;
-  // already an object
-  if (typeof raw === 'object') return raw;
-  // string — might be single or double JSON-encoded
-  let parsed = raw;
-  try { parsed = JSON.parse(raw); } catch (_) { return raw; }
-  // double-encoded: JSON.parse returned another string
-  if (typeof parsed === 'string') {
-    try { parsed = JSON.parse(parsed); } catch (_) {}
-  }
-  return parsed;
+async function redisGet(key) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  // GET /get/key  → { result: <value> }
+  const res = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Upstash GET error ${res.status}`);
+  const json = await res.json();
+  return json.result; // null if key doesn't exist
 }
 
 export default async function handler(req, res) {
@@ -57,15 +49,12 @@ export default async function handler(req, res) {
       if (!title && !body) return res.status(400).json({ error: '内容不能为空' });
 
       const id = shortId();
-      const payload = JSON.stringify({ title, body, tags: tags || [], images: images || [] });
+      const data = { title, body, tags: tags || [], images: images || [] };
 
-      // Use SETEX: SETEX key seconds value  (avoids EX option parsing issues)
-      const result = await upstashCmd([['SETEX', `note:${id}`, TTL, payload]]);
-      if (result[0]?.error) throw new Error(result[0].error);
-
+      await redisSet(`note:${id}`, data, TTL);
       return res.status(200).json({ id });
     } catch (err) {
-      console.error('POST /api/note error:', err);
+      console.error('POST error:', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -76,22 +65,16 @@ export default async function handler(req, res) {
     if (!id) return res.status(400).json({ error: '缺少 id 参数' });
 
     try {
-      const result = await upstashCmd([['GET', `note:${id}`]]);
-      if (result[0]?.error) throw new Error(result[0].error);
-
-      const raw = result[0]?.result;
+      const raw = await redisGet(`note:${id}`);
       if (raw === null || raw === undefined) {
         return res.status(404).json({ error: '笔记不存在或已过期' });
       }
 
-      const data = parseResult(raw);
-      if (!data || typeof data !== 'object') {
-        return res.status(500).json({ error: '数据格式错误', raw: String(raw).slice(0, 100) });
-      }
-
+      // Upstash /get returns the value as-is (already parsed JSON object)
+      const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
       return res.status(200).json(data);
     } catch (err) {
-      console.error('GET /api/note error:', err);
+      console.error('GET error:', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
